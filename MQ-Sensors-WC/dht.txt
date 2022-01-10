@@ -1,0 +1,84 @@
+#include <PubSubClient.h>
+#include <ESP8266WiFi.h>
+#include "DHT.h"
+#define DHTTYPE DHT11
+
+// Autora: Aurora Polo Rodríguez & Javier Medina Quero
+
+DHT dht(D4, DHTTYPE);
+
+
+const char* ssid     = "Xiaomi_FE71";
+const char* password = "mondongo0030082932gordo";
+
+const char* topic = "sensor_data/NodeMCU";
+const char* server = "192.168.1.23";
+
+void callback(char* topic, byte* payload, unsigned int length) {
+}
+
+WiFiClient wifiClient;
+PubSubClient client(server, 1883, callback, wifiClient);
+
+
+String macToStr(const uint8_t* mac)
+{
+  String result;
+  for (int i = 0; i < 6; ++i) {
+    result += String(mac[i], 16);
+    if (i < 5)
+      result += ':';
+  }
+  return result;
+}
+
+void setup() {
+  Serial.begin(9600);
+  dht.begin();
+  delay(10);
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+  }
+
+  String clientName;
+  clientName += "esp8266-";
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  clientName += macToStr(mac);
+  clientName += "-";
+  clientName += String(micros() & 0xff, 16);
+
+  if (client.connect((char*) clientName.c_str())) {
+    Serial.println("Connected to MQTT broker");
+  } else {
+    Serial.println("MQTT connect failed");
+    abort();
+  }
+}
+
+const long interval=2000;
+unsigned long previousMillis=0;
+
+void loop() {
+  unsigned long currentMillis=millis();
+  if((currentMillis-previousMillis)>=interval){
+    previousMillis=currentMillis;
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+    float f = dht.readTemperature(true);
+
+     if (isnan(h) || isnan(t) || isnan(f)) {
+       Serial.println(F("Failed to read from DHT sensor!"));
+       return;
+     }
+
+    String buf;
+    buf+=String(t,2);
+    buf+=String(",");
+    buf+=String(h,2);
+
+    client.publish(topic, buf.c_str());
+  }
+}
